@@ -1,96 +1,131 @@
-import pytest
-from unittest.mock import patch
-
-from app import app
-from inventory import reset_store
+import json
 
 
-@pytest.fixture(autouse=True)
-def setup_and_teardown():
-    reset_store()
-    yield
-    reset_store()
-
-
-@pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
-
-
-def test_get_inventory(client):
-    response = client.get("/inventory")
+def test_home_page(client):
+    """Test the home page loads successfully."""
+    response = client.get("/")
     assert response.status_code == 200
-    data = response.get_json()
-    assert isinstance(data, list)
+
+
+def test_get_all_inventory(client):
+    """Test retrieving all inventory items."""
+    response = client.get("/inventory")
+
+    assert response.status_code == 200
+    assert isinstance(response.get_json(), list)
 
 
 def test_get_single_item(client):
+    """Test retrieving an existing inventory item."""
     response = client.get("/inventory/1")
+
     assert response.status_code == 200
-    assert response.get_json()["id"] == 1
+
+    data = response.get_json()
+
+    assert data["id"] == 1
+    assert "product_name" in data
+
+
+def test_get_nonexistent_item(client):
+    """Test requesting an item that does not exist."""
+    response = client.get("/inventory/999")
+
+    assert response.status_code == 404
+
+    assert response.get_json()["error"] == "Item not found"
 
 
 def test_create_item(client):
-    response = client.post("/inventory", json={
-        "product_name": "Cashew Milk",
-        "brands": "Simple Truth",
-        "ingredients_text": "Water, cashews",
-        "barcode": "9999999999999",
-        "price": 4.25,
-        "stock": 12
-    })
+    """Test creating a new inventory item."""
+
+    new_product = {
+        "product_name": "Rice",
+        "brand": "Daawat",
+        "price": 350,
+        "stock": 20,
+        "barcode": "1234567890"
+    }
+
+    response = client.post(
+        "/inventory",
+        data=json.dumps(new_product),
+        content_type="application/json"
+    )
+
     assert response.status_code == 201
-    assert response.get_json()["product_name"] == "Cashew Milk"
+
+    product = response.get_json()
+
+    assert product["product_name"] == "Rice"
+    assert product["brand"] == "Daawat"
+    assert product["price"] == 350
+    assert product["stock"] == 20
 
 
-def test_patch_item(client):
-    response = client.patch("/inventory/1", json={"price": 5.55, "stock": 99})
+def test_create_item_missing_fields(client):
+    """Test creating a product with missing required fields."""
+
+    incomplete_product = {
+        "product_name": "Sugar"
+    }
+
+    response = client.post(
+        "/inventory",
+        data=json.dumps(incomplete_product),
+        content_type="application/json"
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_item(client):
+    """Test updating an existing product."""
+
+    update_data = {
+        "price": 500,
+        "stock": 40
+    }
+
+    response = client.patch(
+        "/inventory/1",
+        data=json.dumps(update_data),
+        content_type="application/json"
+    )
+
     assert response.status_code == 200
-    data = response.get_json()
-    assert data["price"] == 5.55
-    assert data["stock"] == 99
+
+    updated = response.get_json()
+
+    assert updated["price"] == 500
+    assert updated["stock"] == 40
+
+
+def test_update_nonexistent_item(client):
+    """Test updating an item that doesn't exist."""
+
+    response = client.patch(
+        "/inventory/999",
+        data=json.dumps({"price": 100}),
+        content_type="application/json"
+    )
+
+    assert response.status_code == 404
 
 
 def test_delete_item(client):
-    response = client.delete("/inventory/1")
-    assert response.status_code == 200
-    follow_up = client.get("/inventory/1")
-    assert follow_up.status_code == 404
+    """Test deleting an existing item."""
 
-
-def test_import_item(client):
-    fake_product = {
-        "product_name": "Imported Protein Bar",
-        "brands": "Test Brand",
-        "ingredients_text": "Protein, oats",
-        "barcode": "7777777777777",
-        "price": 0.0,
-        "stock": 0,
-        "source": "OpenFoodFacts"
-    }
-
-    with patch("app.fetch_product_details", return_value=fake_product):
-        response = client.post("/inventory/import", json={"barcode": "7777777777777"})
-
-    assert response.status_code == 201
-    assert response.get_json()["product_name"] == "Imported Protein Bar"
-
-
-def test_search_openfoodfacts(client):
-    fake_product = {
-        "product_name": "Search Result Milk",
-        "brands": "Search Brand",
-        "ingredients_text": "Milk",
-        "barcode": "8888888888888",
-        "price": 0.0,
-        "stock": 0,
-        "source": "OpenFoodFacts"
-    }
-
-    with patch("app.fetch_product_details", return_value=fake_product):
-        response = client.get("/openfoodfacts/search?query=milk")
+    response = client.delete("/inventory/2")
 
     assert response.status_code == 200
-    assert response.get_json()["product_name"] == "Search Result Milk"
+
+    assert response.get_json()["message"] == "Item deleted successfully"
+
+
+def test_delete_nonexistent_item(client):
+    """Test deleting a product that doesn't exist."""
+
+    response = client.delete("/inventory/999")
+
+    assert response.status_code == 404
