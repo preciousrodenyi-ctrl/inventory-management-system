@@ -61,7 +61,7 @@ inventory-management-system/
 ### Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/inventory-management-system.git
+git clone https://github.com/preciousrodenyi-ctrl/inventory-management-system.git
 ```
 
 ### Enter the project folder
